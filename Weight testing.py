@@ -125,6 +125,12 @@ class_weights = class_weight.compute_class_weight(
 class_weights_dict = {0: class_weights[0], 1: class_weights[1]}
 print("Class Weights:", class_weights_dict)
 
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+    loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+    metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')]
+)
+
 model.fit(train, train_y, validation_data=(test, test_y), epochs=10, batch_size=16, class_weight=class_weights_dict)
 from sklearn.metrics import classification_report
 

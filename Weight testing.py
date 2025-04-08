@@ -79,18 +79,17 @@ print("Unique labels:", np.unique(train_y))
 class MyModel(tf.keras.Model):
     def __init__(self):
         super().__init__()
-        self.conv1 = layers.Conv1D(64, 5, activation='relu', padding='same')
-        self.bn1 = layers.BatchNormalization()
-        self.conv2 = layers.Conv1D(128, 5, activation='relu', padding='same')
-        self.bn2 = layers.BatchNormalization()
-        self.conv3 = layers.Conv1D(256, 5, activation='relu', padding='same')  
-        self.bn3 = layers.BatchNormalization()
-        self.flatten = layers.Flatten()
+        self.conv1 = layers.Conv1D(100, 5, activation='relu', padding='same')
+        self.bn1 = layers.AveragePooling1D(2)
+        self.conv2 = layers.Conv1D(200, 5, activation='relu', padding='same')
+        self.bn2 = layers.AveragePooling1D(2)
+        self.conv3 = layers.Conv1D(400, 5, activation='relu', padding='same')  
+        self.pool3 = layers.GlobalAveragePooling1D()
         self.d1 = layers.Dense(128, activation='relu')
-        self.drop1 = layers.Dropout(0.3) 
+        self.drop1 = layers.Dropout(0.4)
         self.d2 = layers.Dense(64, activation='relu')
-        self.drop2 = layers.Dropout(0.3)  
-        self.final = layers.Dense(1, activation="sigmoid")  
+        self.drop2 = layers.Dropout(0.4)
+        self.final = layers.Dense(1, activation='sigmoid')  
 
     def call(self, x):
         x = self.conv1(x)
@@ -98,8 +97,7 @@ class MyModel(tf.keras.Model):
         x = self.conv2(x)
         x = self.bn2(x)
         x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.flatten(x)
+        x = self.pool3(x)
         x = self.d1(x)
         x = self.drop1(x)
         x = self.d2(x)
@@ -110,28 +108,35 @@ model = MyModel()
 
 loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
 
 train_accuracy = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
 
 test_accuracy = tf.keras.metrics.BinaryAccuracy(name='test_accuracy')
 
+train_labels = train_y.flatten()
+classes = np.unique(train_labels)
+
+unique, counts = np.unique(train_y, return_counts=True)
+print("Label distribution:", dict(zip(unique, counts)))
+
+
 class_weights = class_weight.compute_class_weight(
     class_weight='balanced',
-    classes=np.unique(train_y.flatten()),
-    y=train_y.flatten()
+    classes=classes,
+    y=train_labels
 )
 
-class_weights_dict = {0: class_weights[0], 1: class_weights[1]}
-print("Class Weights:", class_weights_dict)
+class_weights_dict = dict(zip(classes, class_weights))
+print("Class weights:", class_weights_dict)
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
     loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
     metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')]
 )
 
-model.fit(train, train_y, validation_data=(test, test_y), epochs=10, batch_size=16, class_weight=class_weights_dict)
+model.fit(train, train_y, validation_data=(test, test_y), epochs=500, batch_size=50, class_weight=class_weights_dict)
 from sklearn.metrics import classification_report
 
 # At the end of testing

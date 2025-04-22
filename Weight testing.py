@@ -1,12 +1,11 @@
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-from keras import Sequential
-from keras import layers, optimizers
+from keras import layers, callbacks
 from sklearn.model_selection import train_test_split as tts
 import pandas as pd
 import os
 from sklearn.utils import class_weight
+from sklearn.metrics import classification_report
 
 os.environ["PATH"] += os.pathsep + "C:/Program Files/Graphviz/bin"
 
@@ -20,7 +19,8 @@ files = [r"C:\masters\machine learning\january.csv", r"C:\masters\machine learni
          r"C:\masters\machine learning\Provan List\14101995.csv", r"C:\masters\machine learning\Provan List\15081995.csv", r"C:\masters\machine learning\Provan List\18011996.csv", 
          r"C:\masters\machine learning\Provan List\19011996.csv", r"C:\masters\machine learning\Provan List\19031996.csv", r"C:\masters\machine learning\Provan List\24091995.csv",
          r"C:\masters\machine learning\Provan List\24091996.csv", r"C:\masters\machine learning\Provan List\25011996.csv", r"C:\masters\machine learning\Provan List\25091996.csv",
-         r"C:\masters\machine learning\Provan List\26011996.csv", r"C:\masters\machine learning\Provan List\27011996.csv"]
+         r"C:\masters\machine learning\Provan List\26011996.csv", r"C:\masters\machine learning\Provan List\27011996.csv", r"C:\masters\machine learning\february.csv",
+         r'C:\masters\machine learning\march.csv', r'C:\masters\machine learning\validate.csv']
 
 df = pd.concat((pd.read_csv(file) for file in files), ignore_index=True)
 
@@ -41,19 +41,31 @@ min_max_scaling(df, 'v', 2, 1)
 min_max_scaling(df, 'time', 1, 0)
 
 df.dropna(inplace=True)
+#=========================================== AUGMENTATION ====================================================
+augment = df[df['event'] == 1].copy()
+def Augmentation(df, column_name):
+    if column_name == 'v':
+        df[column_name] = df[column_name].apply(lambda x: x - np.random.uniform(0, 0.1))
+    elif column_name == 'p_l':
+        df[column_name] = df[column_name].apply(lambda x: x + np.random.uniform(0, 0.5))
+    return df
+new_df, new_again, goddamn = Augmentation(augment, 'v'), Augmentation(augment, 'v'), Augmentation(augment, 'v')
+new_df, new_again, goddamn = Augmentation(new_df, 'p_l'), Augmentation(new_again, 'p_l'), Augmentation(goddamn, 'p_l')
+#=========================================== END AUGMENTATION =========================================================
+df = pd.concat([df, new_df, new_again, goddamn], ignore_index=True)
 #=========================================== DO NOT CHANGE THIS PART ====================================================
-data = df.values  
-batch_size = 101
+data = df.values
+batch_size = 5008 # Adjust this to your needs
 
-batches = [data[i:i + batch_size] for i in range(0, len(data), batch_size)]  # List of arrays
+batches = [data[i:i + batch_size] for i in range(0, len(data), batch_size)] 
 
 np.random.shuffle(batches)
 
-shuffled_data = np.concatenate(batches, axis=0)  # Merge batches back into a single array
+shuffled_data = np.concatenate(batches, axis=0)  
 df_shuffled = pd.DataFrame(shuffled_data, columns=df.columns)
-print(df_shuffled)
+df_new = df_shuffled[['p_l', 'v', 'event']]
 
-train, test = tts(df_shuffled, test_size=0.1, shuffle=False)  
+train, test = tts(df_new, test_size=0.1, shuffle=False)  
 
 train_y = train.pop('event')
 test_y = test.pop('event')
@@ -68,36 +80,34 @@ train = tf.expand_dims(train.values, axis=-1)
 test = tf.expand_dims(test.values, axis=-1)
 
 #=========================================== END OF DO NOT CHANGE ====================================================
-
-train_ds = tf.data.Dataset.from_tensor_slices((train, train_y)).batch(16)
-test_ds = tf.data.Dataset.from_tensor_slices((test, test_y)).batch(16)
-
-#for feature, event in train_ds.take(1):
- #   print('Features: {}, Event: {}'.format(feature, event))
+bathch_size = 16
+train_ds = tf.data.Dataset.from_tensor_slices((train, train_y)).batch(bathch_size)
+test_ds = tf.data.Dataset.from_tensor_slices((test, test_y)).batch(bathch_size)
+    
 print("Unique labels:", np.unique(train_y))
 
 class MyModel(tf.keras.Model):
     def __init__(self):
         super().__init__()
-        self.conv1 = layers.Conv1D(100, 5, activation='relu', padding='same')
-        self.bn1 = layers.AveragePooling1D(2)
-        self.conv2 = layers.Conv1D(200, 5, activation='relu', padding='same')
-        self.bn2 = layers.AveragePooling1D(2)
-        self.conv3 = layers.Conv1D(400, 5, activation='relu', padding='same')  
-        self.pool3 = layers.GlobalAveragePooling1D()
-        self.d1 = layers.Dense(128, activation='relu')
-        self.drop1 = layers.Dropout(0.4)
-        self.d2 = layers.Dense(64, activation='relu')
-        self.drop2 = layers.Dropout(0.4)
-        self.final = layers.Dense(1, activation='sigmoid')  
+        self.conv1 = layers.Conv1D(64, 5, activation='relu', padding='same')
+        self.pool1 = layers.BatchNormalization()
+        self.conv2 = layers.Conv1D(128, 5, activation='relu', padding='same')
+        self.pool2 = layers.BatchNormalization()
+        self.conv3 = layers.Conv1D(256, 5, activation='relu', padding='same')  
+        self.globalpool = layers.GlobalAveragePooling1D()
+        self.d1 = layers.Dense(64, activation='relu')
+        self.drop1 = layers.Dropout(0.5)
+        self.d2 = layers.Dense(32, activation='relu') 
+        self.drop2 = layers.Dropout(0.5)
+        self.final = layers.Dense(1, activation='sigmoid')
 
     def call(self, x):
         x = self.conv1(x)
-        x = self.bn1(x)
+        x = self.pool1(x)
         x = self.conv2(x)
-        x = self.bn2(x)
+        x = self.pool2(x)
         x = self.conv3(x)
-        x = self.pool3(x)
+        x = self.globalpool(x)
         x = self.d1(x)
         x = self.drop1(x)
         x = self.d2(x)
@@ -106,40 +116,42 @@ class MyModel(tf.keras.Model):
 
 model = MyModel()
 
-loss_fn = tf.keras.losses.BinaryCrossentropy(from_logits=False)
-
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-
-train_accuracy = tf.keras.metrics.BinaryAccuracy(name='train_accuracy')
-
-test_accuracy = tf.keras.metrics.BinaryAccuracy(name='test_accuracy')
-
 train_labels = train_y.flatten()
 classes = np.unique(train_labels)
 
 unique, counts = np.unique(train_y, return_counts=True)
 print("Label distribution:", dict(zip(unique, counts)))
 
+early_stop = callbacks.EarlyStopping(
+    monitor='val_loss',       
+    patience=10,              
+    restore_best_weights=True)
+
+checkpoint_cb = callbacks.ModelCheckpoint(
+    'best_model.h5', 
+    monitor='val_loss',
+    save_best_only=True,
+    save_weights_only=False,  # change to True if you only want weights
+    mode='min',
+    verbose=1)
 
 class_weights = class_weight.compute_class_weight(
     class_weight='balanced',
     classes=classes,
-    y=train_labels
-)
+    y=train_labels)
 
 class_weights_dict = dict(zip(classes, class_weights))
 print("Class weights:", class_weights_dict)
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
     loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
-    metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')]
-)
+    metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')])
 
-model.fit(train, train_y, validation_data=(test, test_y), epochs=500, batch_size=50, class_weight=class_weights_dict)
-from sklearn.metrics import classification_report
+model.fit(train, train_y, validation_data=(test, test_y), epochs=500,
+          batch_size=bathch_size, class_weight=class_weights_dict,
+          callbacks=[early_stop, checkpoint_cb])
 
-# At the end of testing
 y_true = []
 y_pred = []
 
@@ -150,8 +162,13 @@ for x_batch_test, y_batch_test in test_ds:
     y_pred.extend(preds.flatten())
 
 print(classification_report(y_true, y_pred))
-auc = tf.keras.metrics.AUC(name='auc')
-...
-auc.update_state(y_batch_test, logits)
-print("Test AUC:", auc.result().numpy())
-auc.reset_state()
+from sklearn.metrics import roc_auc_score
+
+# After predicting all test set
+y_pred_probs = []  # store actual sigmoid probabilities here
+
+for x_batch_test, y_batch_test in test_ds:
+    logits = model(x_batch_test, training=False)
+    y_pred_probs.extend(logits.numpy().flatten())
+
+print("Test AUC:", roc_auc_score(y_true, y_pred_probs))

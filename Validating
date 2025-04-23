@@ -1,0 +1,68 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import datetime as dt
+from weight_test import MyModel
+import matplotlib.pyplot as plt
+import seaborn as sns 
+
+model = tf.keras.models.load_model('best_model.keras', custom_objects={'MyModel': MyModel})
+
+df_unlabeled = pd.read_csv(r'C:\masters\machine learning\Provan List\14091996.csv')
+df_copy = df_unlabeled.copy()
+
+df_unlabeled['time'] = pd.to_datetime(df_unlabeled['time'], format='%Y-%m-%d %H:%M:%S')
+df_unlabeled['time'] = df_unlabeled['time'].astype(np.int64)
+
+def min_max_scaling(df, column_name, a, b):
+    min_value = df[column_name].min()
+    max_value = df[column_name].max()
+    df[column_name] = a * (df[column_name] - min_value) / (max_value - min_value) - b
+    
+min_max_scaling(df_unlabeled, 'p_l', 1, 0)
+min_max_scaling(df_unlabeled, 'v', 2, 1)
+min_max_scaling(df_unlabeled, 'time', 1, 0)
+
+df_unlabeled = df_unlabeled[['p_l', 'v']]
+df_unlabeled.dropna(inplace=True)
+
+X_unlabeled = tf.expand_dims(df_unlabeled.values, axis=-1)
+
+pred_probs = model.predict(X_unlabeled)
+pred_labels = (pred_probs > 0.5).astype(int)
+df_copy['predicted_event'] = pred_labels
+
+df = df_copy.loc[df_copy['predicted_event'] == 1]
+
+#for i, p in enumerate(preds):
+ #   print(f"Sample {i}: Prediction = {p[0]:.4f}, Class = {int(p[0] > 0.5)}")
+    #for i in range(1, len(df)):
+    #if df['time'][i-1].hour == df['time'][i].hour:
+#df = df_unlabeled.loc[df_unlabeled['predicted_event'] == 1]
+
+heatmap_data = df.pivot(index='range_gate', columns='time', values='p_l')
+pther_data = df.pivot(index='range_gate', columns='time', values='v')
+
+plt.figure(figsize=(12, 6))
+sns.heatmap(pther_data, cmap='gist_rainbow', cbar_kws={'label': 'Velocity (v)'},
+            xticklabels=25, yticklabels=10, vmin=-800, vmax=800) 
+
+plt.gca().invert_yaxis()
+
+plt.title('2D Heatmap of Velocity over Time and Range Gate')
+plt.xlabel('Time')
+plt.ylabel('Range Gate')
+plt.xticks(rotation=15)
+plt.show()
+
+plt.figure(figsize=(12, 6))
+
+sns.heatmap(heatmap_data, cmap='rainbow', cbar_kws={'label': 'Power (p_l)'}, 
+            xticklabels=25, yticklabels=10, vmin=0, vmax=40) 
+plt.gca().invert_yaxis()
+
+plt.title('2D Heatmap of Velocity over Time and Range Gate')
+plt.xlabel('Time')
+plt.ylabel('Range Gate')
+plt.xticks(rotation=15)
+plt.show()

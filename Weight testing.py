@@ -80,7 +80,7 @@ if __name__ == "__main__":
     df = pd.concat([df, new_df, new_again, goddamn], ignore_index=True)
     #=========================================== DO NOT CHANGE THIS PART ====================================================
     data = df.values
-    batch_size = 5008 # Adjust this to your needs
+    batch_size = 5008
 
     batches = [data[i:i + batch_size] for i in range(0, len(data), batch_size)] 
 

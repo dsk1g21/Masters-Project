@@ -128,7 +128,7 @@ if __name__ == "__main__":
         'best_model.keras', 
         monitor='val_loss',
         save_best_only=True,
-        save_weights_only=False,  # change to True if you only want weights
+        save_weights_only=False,
         mode='min',
         verbose=1)
 

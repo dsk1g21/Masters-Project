@@ -161,9 +161,8 @@ if __name__ == "__main__":
     print(classification_report(y_true, y_pred))
     from sklearn.metrics import roc_auc_score
 
-    # After predicting all test set
-    y_pred_probs = []  # store actual sigmoid probabilities here
-
+    y_pred_probs = []  
+    
     for x_batch_test, y_batch_test in test_ds:
         logits = model(x_batch_test, training=False)
         y_pred_probs.extend(logits.numpy().flatten())
